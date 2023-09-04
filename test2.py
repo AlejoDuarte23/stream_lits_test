@@ -1,16 +1,73 @@
 import streamlit as st
-from streamlit_chat import message
 import os
-
+from streamlit_chat import message
+from langchain.utilities import SerpAPIWrapper
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import (
     SystemMessage,
     HumanMessage,
     AIMessage
 )
+from langchain.utilities import SerpAPIWrapper
+from langchain.llms import OpenAI
+from langchain.tools import DuckDuckGoSearchRun
 
-openai_api_key = st.secrets["OPENAI_API_KEY"]
+from langchain.utilities import PythonREPL
 
+#%% Api keys
+openai_api_key = ""
+from langchain.tools import DuckDuckGoSearchRun
+from langchain.agents import load_tools, initialize_agent, AgentType,Tool
+
+
+# SerpAPI_api_key=
+
+#%% Tools 
+# DuckDuck
+search = DuckDuckGoSearchRun()
+# Python repl
+python_repl = PythonREPL()
+
+# tools = [  Tool(
+#     name='DuckDuckGo Search',
+#     func= search.run,
+#     description="Useful for when you need to do a search on the internet to find information that another tool can't find. be specific with your input."
+# )]
+    
+
+# python_repl = Tool(
+#     name = "python repl",
+#     func=python_repl.run,
+#     description="useful for when you need to use python to answer a question. You should input python code or math questions"
+# )
+    
+
+tools = [
+    Tool(
+        name="Intermediate Answer",
+        func=search.run,
+        description="useful for searching the web",
+    )
+]
+    
+# tools.append(python_repl)
+
+
+llm = OpenAI(temperature=0.5,openai_api_key=openai_api_key,model_name="gpt-4" )
+
+
+# tools = load_tools(["serpapi"], llm=llm)
+self_ask_with_search = initialize_agent(
+    # agent="zero-shot-react-description",
+    agent=AgentType.SELF_ASK_WITH_SEARCH,
+    tools=tools,
+    llm=llm,
+    verbose=True,
+    max_iterations=10,
+)
+
+
+#%% app
 
 
 
@@ -24,12 +81,12 @@ def init():
 def main():
     init()
 
-    chat = ChatOpenAI(temperature=0.7, openai_api_key=openai_api_key)
+    # chat = ChatOpenAI(temperature=0.7, openai_api_key=openai_api_key)
 
     # initialize message history
     if "messages" not in st.session_state:
         st.session_state.messages = [
-            SystemMessage(content="You are a helpful assistant.")
+            SystemMessage(content="You are a helpful assistant that provides succint answers using clear language, you have some tool to search the web and ask yourself question whe providing answers clean them avoiding thirdparty information in the web just the content")
         ]
 
     st.header("MinckaGPT")
@@ -42,9 +99,9 @@ def main():
         if user_input:
             st.session_state.messages.append(HumanMessage(content=user_input))
             with st.spinner("Thinking..."):
-                response = chat(st.session_state.messages)
+                response =self_ask_with_search.run(st.session_state.messages)
             st.session_state.messages.append(
-                AIMessage(content=response.content))
+                AIMessage(content=response))
 
     # display message history
     messages = st.session_state.get('messages', [])
