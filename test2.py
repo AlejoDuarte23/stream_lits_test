@@ -73,7 +73,6 @@ tools = [  Tool(
 zero_shot_agent = initialize_agent(
     agent="zero-shot-react-description",
     # agent="zero-shot-react-description",
-    # agent=AgentType.SELF_ASK_WITH_SEARCH,
     tools=tools,
     llm=llm,
     verbose=True,
@@ -111,10 +110,12 @@ def init():
     st.set_page_config(
         page_title="MinckatGPT",
     )
+    st.title("Your Message Here")
+
 
 def main():
     init()
-    
+    chat_placeholder = st.empty()
     # Create StreamlitCallbackHandler instance
     st_callback = StreamlitCallbackHandler(st.container())
 
@@ -123,12 +124,20 @@ def main():
             SystemMessage(content=content)
         ]
 
+
+
+    messages = st.session_state.get('messages', [])
+    for i, msg in enumerate(messages[1:]):
+        if i % 2 == 0:
+            message(msg.content, is_user=True, key=str(i) + '_user', avatar_style='no-avatar')
+        else:
+            message(msg.content, is_user=False, key=str(i) + '_ai', avatar_style='no-avatar')
     st.header("MinckaGPT")
 
     # sidebar with user input
+
     with st.container():
         user_input = st.text_input("Your message: ", key="user_input")
-
         if user_input:
             st.session_state.messages.append(HumanMessage(content=user_input))
             with st.spinner("Thinking..."):
@@ -137,13 +146,6 @@ def main():
                 AIMessage(content=response))
             
             # If you want to use the StreamlitCallbackHandler, you may need to link it here.
-
-    messages = st.session_state.get('messages', [])
-    for i, msg in enumerate(messages[1:]):
-        if i % 2 == 0:
-            message(msg.content, is_user=True, key=str(i) + '_user', avatar_style='no-avatar')
-        else:
-            message(msg.content, is_user=False, key=str(i) + '_ai', avatar_style='no-avatar')
-
+            
 if __name__ == '__main__':
     main()
