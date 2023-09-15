@@ -73,6 +73,7 @@ tools = [  Tool(
 zero_shot_agent = initialize_agent(
     agent="zero-shot-react-description",
     # agent="zero-shot-react-description",
+    # agent=AgentType.SELF_ASK_WITH_SEARCH,
     tools=tools,
     llm=llm,
     verbose=True,
