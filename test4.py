@@ -1,40 +1,47 @@
-# app.py
-# from dotenv import load_dotenv, find_dotenv
+# %%  Utils 
+import os 
+import streamlit as st
+
+# %% Lanngchain general streamlit imports 
 from langchain.callbacks import get_openai_callback
 from langchain.schema import (SystemMessage, HumanMessage, AIMessage)
-import streamlit as st
 from langchain.chat_models import ChatOpenAI
-import os 
-from PIL import Image, ImageDraw
-from langchain.utilities import PythonREPL
 from langchain.llms import OpenAI
+from langchain.utilities import PythonREPL
+from PIL import Image
 
-image = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
-# %% api key 
-
-os.environ["OPENAI_API_KEY"] = ""
-openai_api_key = ""
 # %% Shot agent 
 from langchain.tools import DuckDuckGoSearchRun
-from langchain.agents import load_tools, initialize_agent, AgentType,Tool
+from langchain.agents import initialize_agent, Tool
 from langchain.callbacks import StreamlitCallbackHandler
-from langchain.callbacks.base import BaseCallbackHandler
 from langchain import LLMMathChain
 
-
-import pdfplumber
-from bs4 import BeautifulSoup
+# %% PDF imports 
 import urllib.request
+import pdfplumber
 from io import BytesIO
+from bs4 import BeautifulSoup
 
+from PyPDF2 import PdfReader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.chains import RetrievalQA
+from langchain.vectorstores import FAISS
+import pickle
 
-#%% Tools 
+# %% Mincka agent
+from _mincka_agent import create_mincka_agent
+# %% api key 
+os.environ["OPENAI_API_KEY"] = ""
+openai_api_key = ""
+# %% Tools 
 # DuckDuck
 search = DuckDuckGoSearchRun()
 # Python repl
 python_repl = PythonREPL()
 
-_llm = ChatOpenAI(temperature=0.5,openai_api_key=openai_api_key,model_name="gpt-4", streaming=True )
+# _llm = ChatOpenAI(temperature=0.5,model_name="gpt-3.5-turbo-0613", streaming=True )
+_llm = ChatOpenAI(temperature=0.5,model_name="gpt-4")
 llm_math_chain = LLMMathChain.from_llm(llm=_llm, verbose=True)
 
 
@@ -51,69 +58,28 @@ tools = [  Tool(
 
 zero_shot_agent = initialize_agent(
     agent="zero-shot-react-description",
-    # agent="zero-shot-react-description",
-    # agent=AgentType.SELF_ASK_WITH_SEARCH,
     tools=tools,
     llm=_llm,
     verbose=True,
     max_iterations=10,
 )
-    
 
-content = """Complete the objective as best you can. You have access to the following tools:
-
-{tools}
-
-Use the following format:
-
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-These were previous tasks you completed:
-
-
-
-Begin!"""
-
-
-# %%  PDF LOADER
-from PyPDF2 import PdfFileReader, PdfFileWriter,PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings.openai import OpenAIEmbeddings
-import pickle
-from langchain.prompts import PromptTemplate
-from langchain.chains import RetrievalQA
-from langchain.vectorstores import FAISS
-import base64
-import urllib.request
+# %% PDF Angent 
 def chucks_engine(pdf): 
     st.write(pdf.name)
-
     pdf_reader = PdfReader(pdf)
-
     text = ""
     for page in pdf_reader.pages:
         text+= page.extract_text()
-
     #langchain_textspliter
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size = 1000,
         chunk_overlap = 200,
         length_function = len
     )
-
     chunks = text_splitter.split_text(text=text)
-
-    
     #store pdf name
-    store_name = pdf.name[:-4]
-    
+    store_name = pdf.name[:-4]   
     if os.path.exists(f"{store_name}.pkl"):
         with open(f"{store_name}.pkl","rb") as f:
             vectorstore = pickle.load(f)
@@ -129,98 +95,19 @@ def chucks_engine(pdf):
             pickle.dump(vectorstore,f)
     return vectorstore
 
-def get_response_RQA(vectorstore,query):
-    # docs = vectorstore.similarity_search(query=query,k=3)
-    
-    llm = OpenAI(temperature=0)
-
+def get_response_RQA(vectorstore,query):    
+    llm = OpenAI(model_name = "gpt-3.5-turbo",temperature=0)
     qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type = "refine",
     retriever=vectorstore.as_retriever())
-    # chain_type_kwargs={"prompt": QA_CHAIN_PROMPT})
-    # result = qa_chain({"query": query})
-    return qa_chain.run(query)#result["result"]
-
-# def displayPDF(file):
-#     # Reading file directly
-#     base64_pdf = base64.b64encode(file.read()).decode('utf-8')
-
-#     # Embedding PDF in HTML
-#     pdf_display = F'<iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="950" type="application/pdf"></iframe>'
-
-#     # Displaying File
-#     st.markdown(pdf_display, unsafe_allow_html=True)
-
-
-# %% logo 
-avatar_bot = Image.open(r"utils\logo_gold_Icon.png")
-avatar_user = Image.open(r"utils\logo_white_icon.png")
-
-
-def init_page():
-    st.set_page_config(
-        page_title="MinckaGPT"
-    )
-    
-    st.markdown(
-        f"""
-        <style>
-            body {{
-                background-color: #cd0000;
-            }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    
-    logo_image = Image.open(r"utils\White_Logo_Black_text_Transparent.png")
-    st.image(logo_image, width=300, channels="RGB")
-
-    st.header("MinckaGPT")
-    st.sidebar.title("Options")
-
-
-
-def init_messages():
-    clear_button = st.sidebar.button("Clear Conversation", key="clear")
-    if clear_button or "messages" not in st.session_state:
-        st.session_state.messages = [
-            SystemMessage(
-                content="You are a helpful AI assistant. Respond your answer in mardkown format.")
-        ]
-        st.session_state.costs = []
-
-
-def select_model():
-    model_name = st.sidebar.radio("Choose LLM:",
-                                  ("gpt-3.5-turbo-0613", "gpt-4", "zero_shot_agent","PDF Loader"))
-    temperature = st.sidebar.slider("Temperature:", min_value=0.0,
-                                    max_value=1.0, value=0.0, step=0.01)
-    return model_name,temperature
-
-
-def get_answer(llm, messages):
     with get_openai_callback() as cb:
-        answer = llm(messages)
-    return answer.content, cb.total_cost
-
-def get_answer_agent( messages,st_callback):
-    response = zero_shot_agent.run(st.session_state.messages,callbacks=[st_callback])
+        response = qa_chain.run(query)
+    st.session_state.costs.append(cb.total_cost)
+    print(f"Total Cost (USD): ${cb.total_cost}")
 
     return response
-
-
-def get_general_answer(method, *args, **kwargs):
-    if method == "llm":
-        return get_answer(*args, **kwargs)
-    elif method == "agent":
-        return get_answer_agent(*args, **kwargs)
-    elif method == "PDF Loader":
-        return get_response_RQA(*args, **kwargs)
-    else:
-        raise ValueError(f"Unknown method: {method}")
-
+#  Display pdfs 
 def pdf_to_html_display(pdf_data):
     html = BeautifulSoup("<html><head></head><body></body></html>", "html.parser")
     head = html.head
@@ -291,6 +178,107 @@ def displayPDF(file):
     pdf_to_html_display(pdf_data)
     
     
+# %% Mincka Agent : 
+zero_shot_agent_mincka,template_mk_agent = create_mincka_agent()
+# %% Streamlit logos , components 
+avatar_bot = Image.open(r"utils\logo_gold_Icon.png")
+avatar_user = Image.open(r"utils\logo_white_icon.png")
+
+
+def init_page():
+    st.set_page_config(
+        page_title="MinckaGPT"
+    )
+    
+    st.markdown(
+        f"""
+        <style>
+            body {{
+                background-color: #cd0000;
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    
+    logo_image = Image.open(r"utils\White_Logo_Black_text_Transparent.png")
+    st.image(logo_image, width=300, channels="RGB")
+
+    st.header("MinckaGPT")
+    st.sidebar.title("Options")
+
+
+_content = "You are a helpful AI assistant. Respond your answer in mardkown format."
+def init_messages(content = _content):
+    clear_button = st.sidebar.button("Clear Conversation", key="clear")
+    st.session_state.costs = []
+    if clear_button or "messages" not in st.session_state:
+        st.session_state.messages = [
+            SystemMessage(
+                content=_content)
+        ]
+        # st.session_state.costs = []
+
+def update_sys_mesage(prompt):
+    st.session_state.messages = [
+        SystemMessage(
+            content=prompt)
+    ]
+    # st.session_state.costs = []
+
+def select_model():
+    model_name = st.sidebar.radio("Choose LLM:",
+                                  ("gpt-3.5-turbo-16k", "gpt-4", "Web Search Agent","PDF Loader","Mincka Agent"))
+    temperature = st.sidebar.slider("Temperature:", min_value=0.0,
+                                    max_value=1.0, value=0.0, step=0.01)
+    return model_name,temperature
+
+# %% Helpers to selec models 
+
+def get_answer(llm, messages):
+    with get_openai_callback() as cb:
+        answer = llm(messages)
+        st.session_state.costs.append(cb.total_cost)
+    return answer.content
+
+def get_answer_agent( messages,st_callback):
+    with get_openai_callback() as cb:
+        response = zero_shot_agent.run(st.session_state.messages,callbacks=[st_callback])
+        print(f"Total Tokens: {cb.total_tokens}")
+        print(f"Prompt Tokens: {cb.prompt_tokens}")
+        print(f"Completion Tokens: {cb.completion_tokens}")
+        print(f"Total Cost (USD): ${cb.total_cost}")
+        st.session_state.costs.append(cb.total_cost)
+    
+    
+
+    return response
+
+def get_answer_mincka_agent( messages,st_callback):
+    with get_openai_callback() as cb:
+        response = zero_shot_agent_mincka.run(st.session_state.messages,callbacks=[st_callback])
+        print(f"Total Tokens: {cb.total_tokens}")
+        print(f"Prompt Tokens: {cb.prompt_tokens}")
+        print(f"Completion Tokens: {cb.completion_tokens}")
+        print(f"Total Cost (USD): ${cb.total_cost}")
+        st.session_state.costs.append(cb.total_cost)
+
+    return response
+    
+
+def get_general_answer(method, *args, **kwargs):
+    if method == "llm":
+        return get_answer(*args, **kwargs)
+    elif method == "agent":
+        return get_answer_agent(*args, **kwargs)
+    elif method == "PDF Loader":
+        return get_response_RQA(*args, **kwargs)
+    elif method == "mincka_agent":
+        return get_answer_mincka_agent(*args, **kwargs)
+    else:
+        raise ValueError(f"Unknown method: {method}")
+
+# %% Main function
 def main():
     init_page()
 
@@ -309,19 +297,26 @@ def main():
     if user_input := st.chat_input("Input your question!"):
         st.session_state.messages.append(HumanMessage(content=user_input))
         with st.spinner("MinckaGPT is typing ..."):
-            if model_name in ["gpt-3.5-turbo-0613", "gpt-4"]:
-                answer, cost = get_general_answer("llm", ChatOpenAI(model_name=model_name, temperature=temperature), st.session_state.messages)
-                st.session_state.costs.append(cost)
-            elif model_name == "zero_shot_agent":
+            if model_name in ["gpt-3.5-turbo-16k", "gpt-4"]:
+                answer = get_general_answer("llm", ChatOpenAI(model_name=model_name, temperature=temperature), st.session_state.messages)
+                
+            elif model_name == "Web Search Agent":
+                
                 answer = get_general_answer("agent", st.session_state.messages, st_callback)
-            # Uncomment the line below when you add RQA
+            elif model_name == "Mincka Agent":
+                # update_sys_mesage(template_mk_agent)
+                answer = get_general_answer("mincka_agent", st.session_state.messages, st_callback)
+            
+
             else:
                 answer = get_general_answer("PDF Loader", vectorstore, user_input)
+                # st.session_state.costs.append(cost)
         st.session_state.messages.append(AIMessage(content=answer))
+        
 
     # Display chat history
     messages = st.session_state.get("messages", [])
-    for message in messages:
+    for message in messages:    
         if isinstance(message, AIMessage):
             with st.chat_message("assistant", avatar=avatar_bot):
                 st.markdown(message.content)
@@ -334,12 +329,6 @@ def main():
         costs = st.session_state.get("costs", [])
         st.sidebar.markdown("## Costs")
         st.sidebar.markdown(f"**Total cost: ${sum(costs):.5f}**")
-        for cost in costs:
-            st.sidebar.markdown(f"- ${cost:.5f}") 
-
-            
-        
-# zero_shot_agent.run(
-
+# %% Main  
 if __name__ == "__main__":
     main()
